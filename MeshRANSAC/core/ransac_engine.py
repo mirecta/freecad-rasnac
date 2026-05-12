@@ -111,6 +111,7 @@ def detect_planes(pcd, distance_threshold=0.5, ransac_n=3,
 
 def detect_cylinders(pcd, distance_threshold=0.5, min_inliers=50,
                      max_cylinders=10, num_iterations=1000,
+                     max_radius=500.0,
                      progress_cb: Optional[Callable] = None):
     """
     Detect cylinders using a custom RANSAC.
@@ -182,7 +183,7 @@ def detect_cylinders(pcd, distance_threshold=0.5, min_inliers=50,
 
             radius = np.linalg.norm(pts[i] - centre3d -
                                     np.dot(pts[i] - centre3d, axis) * axis)
-            if radius < 1e-3:
+            if radius < 1e-3 or radius > max_radius:
                 continue
 
             # Score: count inliers
@@ -272,40 +273,26 @@ def detect_spheres(pcd, distance_threshold=0.5, min_inliers=50,
 
         for _ in range(num_iterations):
             i, j = rng.choice(n_pts, size=2, replace=False)
-            # Centre = pts[i] + t * nrm[i]
-            # |pts[i] + t*nrm[i] - pts[j]|² = t²  (both at radius t from centre)
-            # Expand and solve quadratic in t
-            d = pts[i] - pts[j]
-            n = nrm[i]
-            a = np.dot(n, n) - 1.0   # = 0 since n is unit; handle numerically
-            # More robust: (pts[i] - pts[j] + t*n) · (pts[i] - pts[j] + t*n) = t²
-            # d·d + 2t(n·d) + t²(n·n) = t²
-            # d·d + 2t(n·d) + t²(n·n - 1) = 0
-            nn = np.dot(n, n)
-            nd = np.dot(n, d)
-            dd = np.dot(d, d)
-            coeff_a = nn - 1.0
-            coeff_b = 2.0 * nd
-            coeff_c = dd
-
-            if abs(coeff_a) < 1e-9:
-                # Linear: t = -dd / (2*nd)
-                if abs(coeff_b) < 1e-9:
-                    continue
-                t = -coeff_c / coeff_b
-            else:
-                disc = coeff_b**2 - 4 * coeff_a * coeff_c
-                if disc < 0:
-                    continue
-                t = (-coeff_b + np.sqrt(disc)) / (2 * coeff_a)
-
-            if t <= 0:
-                t = (-coeff_b - np.sqrt(max(disc, 0))) / (2 * coeff_a)
+            # Outward normals point AWAY from centre, so:
+            #   c = pts[i] - t * nrm[i],  t = radius > 0
+            # Constraint: pts[j] also on sphere → |pts[j] - c|² = t²
+            #   let e = pts[j] - pts[i]
+            #   |e + t*nrm[i]|² = t²
+            #   e·e + 2t(e·nrm[i]) + t²‖nrm‖² = t²
+            #   since ‖nrm‖ = 1 → e·e + 2t(e·nrm[i]) = 0
+            #   t = -(e·e) / (2 * e·nrm[i])
+            # For distinct sphere points e·nrm[i] < 0, so t > 0 always.
+            e  = pts[j] - pts[i]
+            ni = nrm[i]
+            denom = 2.0 * np.dot(e, ni)
+            if abs(denom) < 1e-6:
+                continue  # degenerate
+            t = -np.dot(e, e) / denom
             if t <= 0:
                 continue
 
-            centre = pts[i] + t * n
-            radius = abs(t)
+            centre = pts[i] - t * ni
+            radius = t
 
             dist = np.abs(np.linalg.norm(pts - centre, axis=1) - radius)
             inlier_mask = dist < distance_threshold
