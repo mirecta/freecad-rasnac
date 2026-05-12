@@ -232,6 +232,18 @@ def render(pcd, meshes, save_path=None):
         print(f"\n  Image saved → {default}")
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _remove_inliers(pcd, results):
+    """Return pcd with all inlier indices from results removed."""
+    inlier_set = set()
+    for r in results:
+        inlier_set.update(r.inlier_indices)
+    keep = [i for i in range(len(pcd.points)) if i not in inlier_set]
+    return pcd.select_by_index(keep)
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -274,13 +286,8 @@ def main():
             print(f"       Plane {i+1}: normal={r.normal.round(3)}, "
                   f"inliers={r.inlier_count}")
         if args.seq and planes:
-            inlier_set = set()
-            for r in planes: inlier_set.update(r.inlier_indices)
-            keep = [i for i in range(len(working_pcd.points))
-                    if i not in inlier_set]
-            working_pcd = working_pcd.select_by_index(keep)
-            print(f"    (removed {len(inlier_set)} plane inliers, "
-                  f"{len(working_pcd.points)} pts remaining)")
+            working_pcd = _remove_inliers(working_pcd, planes)
+            print(f"    (→ {len(working_pcd.points)} pts remaining)")
 
     if not args.no_cylinders:
         print("\n  Detecting cylinders …")
@@ -290,6 +297,9 @@ def main():
         for i, r in enumerate(cylinders):
             print(f"       Cyl {i+1}: r={r.radius:.2f} mm, "
                   f"h={r.height:.2f} mm, inliers={r.inlier_count}")
+        if args.seq and cylinders:
+            working_pcd = _remove_inliers(working_pcd, cylinders)
+            print(f"    (→ {len(working_pcd.points)} pts remaining)")
 
     if not args.no_spheres:
         print("\n  Detecting spheres …")

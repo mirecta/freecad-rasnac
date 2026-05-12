@@ -291,21 +291,23 @@ def scene_mixed():
     pcd.normals = o3d.utility.Vector3dVector(all_nrm)
 
     # Detect planes first, then remove their inliers before cylinder/sphere search
+    def _strip(pc, results):
+        idx = set()
+        for r in results: idx.update(r.inlier_indices)
+        return pc.select_by_index([i for i in range(len(pc.points)) if i not in idx])
+
     planes = detect_planes(pcd, distance_threshold=0.4, min_inliers=100,
                            num_iterations=1000, max_planes=1)
+    pcd2 = _strip(pcd, planes)
 
-    plane_inliers = set()
-    for r in planes:
-        plane_inliers.update(r.inlier_indices)
-    keep = [i for i in range(len(pcd.points)) if i not in plane_inliers]
-    pcd_no_plane = pcd.select_by_index(keep)
-
-    cylinders = detect_cylinders(pcd_no_plane, distance_threshold=0.5,
+    cylinders = detect_cylinders(pcd2, distance_threshold=0.5,
                                  min_inliers=80, num_iterations=1500,
                                  max_cylinders=4, max_radius=50.0)
-    spheres   = detect_spheres(  pcd_no_plane, distance_threshold=0.6,
-                                 min_inliers=80, num_iterations=1000,
-                                 max_spheres=2, max_radius=50.0)
+    pcd3 = _strip(pcd2, cylinders)
+
+    spheres = detect_spheres(pcd3, distance_threshold=0.6,
+                             min_inliers=80, num_iterations=1000,
+                             max_spheres=2, max_radius=30.0)
 
     print(f"  {len(planes)} plane(s), {len(cylinders)} cylinder(s), {len(spheres)} sphere(s)")
     for r in cylinders:
