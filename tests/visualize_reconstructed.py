@@ -187,7 +187,7 @@ def _render(pcd, meshes, filename):
 
     pt_mat = o3d.visualization.rendering.MaterialRecord()
     pt_mat.shader = "defaultUnlit"
-    pt_mat.point_size = 2.0
+    pt_mat.point_size = 4.0
     render.scene.add_geometry("pcd", pcd_grey, pt_mat)
 
     mesh_mat = o3d.visualization.rendering.MaterialRecord()
@@ -208,9 +208,9 @@ def _render(pcd, meshes, filename):
     bbox = pcd_grey.get_axis_aligned_bounding_box()
     center = np.asarray(bbox.get_center())
     extent = np.asarray(bbox.get_extent())
-    dist = float(np.linalg.norm(extent)) * 1.5
+    dist = float(np.linalg.norm(extent)) * 0.9
     eye = center + np.array([dist*0.55, -dist*0.75, dist*0.6])
-    render.setup_camera(55.0, center.tolist(), eye.tolist(), [0, 0, 1])
+    render.setup_camera(60.0, center.tolist(), eye.tolist(), [0, 0, 1])
 
     img = render.render_to_image()
     o3d.io.write_image(out_path, img)
