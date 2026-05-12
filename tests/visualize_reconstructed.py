@@ -16,6 +16,7 @@ Run:
 import sys
 import os
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 _repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _repo not in sys.path:
@@ -324,12 +325,158 @@ def scene_mixed():
 
 
 # ---------------------------------------------------------------------------
+# Shared render-to-numpy helper (single view, no file save)
+# ---------------------------------------------------------------------------
+
+def _render_view(pcd_grey, meshes, center, eye, fov=60.0, w=800, h=500):
+    """Render one view and return numpy RGBA array."""
+    r = o3d.visualization.rendering.OffscreenRenderer(w, h)
+
+    pt_mat = o3d.visualization.rendering.MaterialRecord()
+    pt_mat.shader = "defaultUnlit"; pt_mat.point_size = 4.0
+    r.scene.add_geometry("pcd", pcd_grey, pt_mat)
+
+    mesh_mat = o3d.visualization.rendering.MaterialRecord()
+    mesh_mat.shader = "defaultLit"
+    mesh_mat.base_roughness = 0.4; mesh_mat.base_reflectance = 0.1
+    for i, m in enumerate(meshes):
+        r.scene.add_geometry(f"m{i}", m, mesh_mat)
+
+    r.scene.set_background([0.08, 0.08, 0.08, 1.0])
+    r.scene.scene.set_sun_light([0.5, -0.7, -0.5], [1, 1, 1], 75000)
+    r.scene.scene.enable_sun_light(True)
+    r.setup_camera(fov, center, eye, [0, 0, 1])
+
+    return np.asarray(r.render_to_image())
+
+
+def _label(arr, text, size=22):
+    """Burn a label into the top-left corner of an RGBA numpy array."""
+    img = Image.fromarray(arr)
+    draw = ImageDraw.Draw(img)
+    # Shadow for readability
+    draw.text((11, 11), text, fill=(0, 0, 0, 200))
+    draw.text((10, 10), text, fill=(220, 220, 220, 255))
+    return np.asarray(img)
+
+
+def _grid(views, cols=3, gap=4, bg=(30, 30, 30)):
+    """Assemble a list of (label, numpy_array) into a cols-wide grid image."""
+    labelled = [_label(arr, lbl) for lbl, arr in views]
+    rows = (len(labelled) + cols - 1) // cols
+    h, w = labelled[0].shape[:2]
+    canvas = Image.new("RGB",
+                       (cols * w + (cols - 1) * gap,
+                        rows * h + (rows - 1) * gap),
+                       color=bg)
+    for i, arr in enumerate(labelled):
+        col, row = i % cols, i // cols
+        x, y = col * (w + gap), row * (h + gap)
+        canvas.paste(Image.fromarray(arr[:, :, :3]), (x, y))
+    return canvas
+
+
+def scene_mixed_multiview():
+    print("\n─── Scene 6: mixed — 6-view inspection ───")
+    rng = np.random.default_rng(50)
+    parts = [
+        _make_plane(   (0,0,1),         size=100, n=3000, seed=50),
+        _make_cylinder((-30, 0,  0), (0,0,1), 7, 25, n=800, seed=51),
+        _make_cylinder(( 10,20,  0), (0,0,1), 4, 18, n=600, seed=52),
+        _make_cylinder(( 30,-15, 0), (0,1,0), 5, 22, n=700, seed=53),
+        _make_sphere(  (  0,-30,15), radius=12,    n=800, seed=54),
+    ]
+    noise_pts = rng.uniform(-60, 60, (400, 3))
+    noise_nrm = rng.normal(0, 1, (400, 3))
+    noise_nrm /= np.linalg.norm(noise_nrm, axis=1, keepdims=True)
+    all_pts = np.vstack([p for p,_ in parts] + [noise_pts])
+    all_nrm = np.vstack([n for _,n in parts] + [noise_nrm])
+
+    pcd_raw = o3d.geometry.PointCloud()
+    pcd_raw.points  = o3d.utility.Vector3dVector(all_pts)
+    pcd_raw.normals = o3d.utility.Vector3dVector(all_nrm)
+
+    def _strip(pc, res):
+        idx = set()
+        for r in res: idx.update(r.inlier_indices)
+        return pc.select_by_index([i for i in range(len(pc.points)) if i not in idx])
+
+    planes    = detect_planes(pcd_raw, distance_threshold=0.4, min_inliers=100,
+                              num_iterations=1000, max_planes=1)
+    pcd2      = _strip(pcd_raw, planes)
+    cylinders = detect_cylinders(pcd2, distance_threshold=0.5, min_inliers=80,
+                                 num_iterations=1500, max_cylinders=4, max_radius=50.0)
+    pcd3      = _strip(pcd2, cylinders)
+    spheres   = detect_spheres(pcd3, distance_threshold=0.6, min_inliers=80,
+                               num_iterations=1000, max_spheres=2, max_radius=30.0)
+
+    print(f"  {len(planes)} plane(s), {len(cylinders)} cylinder(s), {len(spheres)} sphere(s)")
+
+    meshes = (
+        [_plane_mesh(r,    _P_PAL[i%2]) for i, r in enumerate(planes)]
+      + [_cylinder_mesh(r, _C_PAL[i%2]) for i, r in enumerate(cylinders)]
+      + [_sphere_mesh(r,   _S_PAL[i%2]) for i, r in enumerate(spheres)]
+    )
+
+    # Grey point cloud for all views
+    n = len(pcd_raw.points)
+    pcd_grey = o3d.geometry.PointCloud()
+    pcd_grey.points = pcd_raw.points
+    pcd_grey.colors = o3d.utility.Vector3dVector(np.tile(GREY, (n, 1)))
+
+    # Camera setup from bounding box
+    bb  = pcd_grey.get_axis_aligned_bounding_box()
+    ctr = np.asarray(bb.get_center())
+    d   = float(np.linalg.norm(np.asarray(bb.get_extent()))) * 0.85
+
+    # Six viewpoints: label → eye offset
+    views_def = [
+        ("Isometric",   np.array([ 0.55, -0.75,  0.60]) * d),
+        ("Front  (+Y)", np.array([ 0.00, -1.00,  0.15]) * d),
+        ("Back   (-Y)", np.array([ 0.00,  1.00,  0.15]) * d),
+        ("Left   (-X)", np.array([-1.00,  0.00,  0.15]) * d),
+        ("Right  (+X)", np.array([ 1.00,  0.00,  0.15]) * d),
+        ("Top    (+Z)", np.array([ 0.00,  0.00,  1.00]) * d),
+    ]
+
+    # Single renderer reused across all views (avoids GPU resource exhaustion)
+    rv = o3d.visualization.rendering.OffscreenRenderer(800, 500)
+    pt_mat = o3d.visualization.rendering.MaterialRecord()
+    pt_mat.shader = "defaultUnlit"; pt_mat.point_size = 4.0
+    rv.scene.add_geometry("pcd", pcd_grey, pt_mat)
+    mesh_mat = o3d.visualization.rendering.MaterialRecord()
+    mesh_mat.shader = "defaultLit"
+    mesh_mat.base_roughness = 0.4; mesh_mat.base_reflectance = 0.1
+    for i, m in enumerate(meshes):
+        rv.scene.add_geometry(f"m{i}", m, mesh_mat)
+    rv.scene.set_background([0.08, 0.08, 0.08, 1.0])
+    rv.scene.scene.set_sun_light([0.5, -0.7, -0.5], [1, 1, 1], 75000)
+    rv.scene.scene.enable_sun_light(True)
+
+    rendered = []
+    for label, offset in views_def:
+        eye = (ctr + offset).tolist()
+        up  = [0, 1, 0] if label.startswith("Top") else [0, 0, 1]
+        rv.setup_camera(60.0, ctr.tolist(), eye, up)
+        arr = np.asarray(rv.render_to_image())
+        rendered.append((label, arr))
+        print(f"    rendered: {label}")
+
+    grid_img = _grid(rendered, cols=3, gap=3)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    out = os.path.join(OUTPUT_DIR, "recon6_multiview.png")
+    grid_img.save(out)
+    print(f"  → saved {out}")
+
+
+# ---------------------------------------------------------------------------
 SCENES = [
     ("Plane reconstruction",        scene_plane),
     ("Two planes reconstruction",   scene_two_planes),
     ("Cylinders reconstruction",    scene_cylinders),
     ("Sphere reconstruction",       scene_sphere),
     ("Mixed reconstruction",        scene_mixed),
+    ("Mixed — 6-view inspection",   scene_mixed_multiview),
 ]
 
 def main():
