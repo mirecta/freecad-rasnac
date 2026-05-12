@@ -236,6 +236,7 @@ def detect_cylinders(pcd, distance_threshold=0.5, min_inliers=50,
 
 def detect_spheres(pcd, distance_threshold=0.5, min_inliers=50,
                    max_spheres=10, num_iterations=1000,
+                   max_radius=500.0,
                    progress_cb: Optional[Callable] = None):
     """
     Detect spheres using a custom RANSAC.
@@ -293,6 +294,8 @@ def detect_spheres(pcd, distance_threshold=0.5, min_inliers=50,
 
             centre = pts[i] - t * ni
             radius = t
+            if radius > max_radius:
+                continue
 
             dist = np.abs(np.linalg.norm(pts - centre, axis=1) - radius)
             inlier_mask = dist < distance_threshold
