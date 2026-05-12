@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>MeshRANSAC</name>
+  <description>RANSAC primitive shape detection from 3D scan meshes. Detects planes, cylinders, and spheres and outputs a Part::Compound ready for use in Part/PartDesign.</description>
+  <version>0.1.0</version>
+  <date>2026-05-12</date>
+  <maintainer email="miroslav.talasek@gmail.com">Miroslav Talasek</maintainer>
+  <license>LGPL-2.1-or-later</license>
+  <url type="repository">https://github.com/mtalasek/MeshRANSAC</url>
+  <content>
+    <workbench/>
+  </content>
+  <pythondeps>
+    <package version="&gt;=0.18">open3d</package>
+  </pythondeps>
+</package>

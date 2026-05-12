@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Cylinder body -->
+  <rect x="18" y="18" width="28" height="32" fill="#2ecc71" opacity="0.9"/>
+  <!-- Top cap -->
+  <ellipse cx="32" cy="18" rx="14" ry="5" fill="#27ae60" opacity="0.95"/>
+  <!-- Bottom cap (visible edge) -->
+  <ellipse cx="32" cy="50" rx="14" ry="5" fill="#1e8449" opacity="0.9"/>
+  <!-- Side highlight -->
+  <rect x="18" y="18" width="28" height="32" fill="none" stroke="#1e8449" stroke-width="1.2"/>
+</svg>

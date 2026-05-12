@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Perspective plane -->
+  <polygon points="8,44 32,20 56,44 32,52" fill="#4a9edd" opacity="0.85"/>
+  <polygon points="8,44 32,20 56,44 32,52" fill="none" stroke="#2980b9" stroke-width="1.5"/>
+  <!-- Grid lines on the plane -->
+  <line x1="20" y1="43" x2="44" y2="30" stroke="#2980b9" stroke-width="0.8" opacity="0.6"/>
+  <line x1="32" y1="48" x2="32" y2="20" stroke="#2980b9" stroke-width="0.8" opacity="0.6"/>
+</svg>
