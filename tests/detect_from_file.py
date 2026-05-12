@@ -16,7 +16,10 @@ Options:
     --dist     F      RANSAC distance threshold mm         (default 0.5)
     --inliers  N      Minimum inliers to accept primitive  (default 50)
     --iters    N      RANSAC iterations per shape          (default 1000)
-    --maxr     N      Max shapes per type                  (default 10)
+    --maxr     N      Max shapes per type (fallback)        (default 10)
+    --max-planes N    Max planes   (overrides --maxr)
+    --max-cyl    N    Max cylinders (overrides --maxr)
+    --max-sph    N    Max spheres   (overrides --maxr)
     --maxrad   F      Max primitive radius mm              (default 500)
     --no-planes       Skip plane detection
     --no-cylinders    Skip cylinder detection
@@ -256,7 +259,14 @@ def main():
     parser.add_argument("--dist",          type=float, default=0.5)
     parser.add_argument("--inliers",       type=int,   default=50)
     parser.add_argument("--iters",         type=int,   default=1000)
-    parser.add_argument("--maxr",          type=int,   default=10)
+    parser.add_argument("--maxr",          type=int,   default=10,
+                        help="Max shapes per type (overridden by --max-planes/cyl/sph)")
+    parser.add_argument("--max-planes",    type=int,   default=None,
+                        help="Max planes (overrides --maxr for planes)")
+    parser.add_argument("--max-cyl",       type=int,   default=None,
+                        help="Max cylinders (overrides --maxr for cylinders)")
+    parser.add_argument("--max-sph",       type=int,   default=None,
+                        help="Max spheres (overrides --maxr for spheres)")
     parser.add_argument("--maxrad",        type=float, default=500.0)
     parser.add_argument("--no-planes",     action="store_true")
     parser.add_argument("--no-cylinders",  action="store_true")
@@ -275,12 +285,16 @@ def main():
     kw = dict(distance_threshold=args.dist, min_inliers=args.inliers,
               num_iterations=args.iters)
 
+    max_p = args.max_planes if args.max_planes is not None else args.maxr
+    max_c = args.max_cyl   if args.max_cyl   is not None else args.maxr
+    max_s = args.max_sph   if args.max_sph   is not None else args.maxr
+
     planes, cylinders, spheres = [], [], []
     working_pcd = pcd
 
     if not args.no_planes:
         print("\n  Detecting planes …")
-        planes = detect_planes(working_pcd, max_planes=args.maxr, **kw)
+        planes = detect_planes(working_pcd, max_planes=max_p, **kw)
         print(f"    → {len(planes)} plane(s)")
         for i, r in enumerate(planes):
             print(f"       Plane {i+1}: normal={r.normal.round(3)}, "
@@ -291,7 +305,7 @@ def main():
 
     if not args.no_cylinders:
         print("\n  Detecting cylinders …")
-        cylinders = detect_cylinders(working_pcd, max_cylinders=args.maxr,
+        cylinders = detect_cylinders(working_pcd, max_cylinders=max_c,
                                      max_radius=args.maxrad, **kw)
         print(f"    → {len(cylinders)} cylinder(s)")
         for i, r in enumerate(cylinders):
@@ -303,7 +317,7 @@ def main():
 
     if not args.no_spheres:
         print("\n  Detecting spheres …")
-        spheres = detect_spheres(working_pcd, max_spheres=args.maxr,
+        spheres = detect_spheres(working_pcd, max_spheres=max_s,
                                  max_radius=args.maxrad, **kw)
         print(f"    → {len(spheres)} sphere(s)")
         for i, r in enumerate(spheres):
